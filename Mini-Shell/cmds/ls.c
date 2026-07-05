@@ -124,9 +124,7 @@ int main(int argc, char ** argv){
 				}
 
 				// Find the absolute path of the file in order to call stat()
-				strcpy(filename, argv[i]);
-				strcat(filename, "/");
-				strcat(filename, entry[entno]->d_name);
+				snprintf(filename, sizeof(filename), "%s/%s", argv[i], entry[entno]->d_name);
 
 				// Call stat() and get file info
 				if ( stat(filename, &statbuf) == -1){
@@ -159,23 +157,35 @@ int main(int argc, char ** argv){
 					printf("-");
 				}
 				// Permissions for User
-				(S_IRUSR && statbuf.st_mode)? printf("r") : printf("-");
-				(S_IWUSR && statbuf.st_mode)? printf("w") : printf("-");
-				(S_IXUSR && statbuf.st_mode)? printf("x") : printf("-");
+				(statbuf.st_mode & S_IRUSR)? printf("r") : printf("-");
+				(statbuf.st_mode & S_IWUSR)? printf("w") : printf("-");
+				(statbuf.st_mode & S_IXUSR)? printf("x") : printf("-");
 				// Permissions for Group
-				(S_IRGRP && statbuf.st_mode)? printf("r") : printf("-");
-				(S_IWGRP && statbuf.st_mode)? printf("w") : printf("-");
-				(S_IXGRP && statbuf.st_mode)? printf("x") : printf("-");
+				(statbuf.st_mode & S_IRGRP)? printf("r") : printf("-");
+				(statbuf.st_mode & S_IWGRP)? printf("w") : printf("-");
+				(statbuf.st_mode & S_IXGRP)? printf("x") : printf("-");
 				// Permissions for Other Users
-				(S_IROTH && statbuf.st_mode)? printf("r") : printf("-");
-				(S_IWOTH && statbuf.st_mode)? printf("w") : printf("-");
-				(S_IXOTH && statbuf.st_mode)? printf("x") : printf("-");
+				(statbuf.st_mode & S_IROTH)? printf("r") : printf("-");
+				(statbuf.st_mode & S_IWOTH)? printf("w") : printf("-");
+				(statbuf.st_mode & S_IXOTH)? printf("x") : printf("-");
 				// Number of links
 				printf(" %3li",statbuf.st_nlink);
 				// User Name
-				printf(" %-15s", getpwuid(statbuf.st_uid)->pw_name);
+				struct passwd * pw = getpwuid(statbuf.st_uid);
+				if ( pw != NULL ){
+					printf(" %-15s", pw->pw_name);
+				}
+				else{
+					printf(" %-15d", statbuf.st_uid);
+				}
 				// Group name
-				printf(" %-15s", getgrgid(statbuf.st_gid)->gr_name);
+				struct group * gr = getgrgid(statbuf.st_gid);
+				if ( gr != NULL ){
+					printf(" %-15s", gr->gr_name);
+				}
+				else{
+					printf(" %-15d", statbuf.st_gid);
+				}
 				// File Size
 				printf(" %11ld", statbuf.st_size);
 				// File last modification time
