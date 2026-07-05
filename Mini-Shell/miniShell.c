@@ -147,6 +147,7 @@ int shell_echo(char ** args){
 		i++;
 	}
 	printf("\n");
+	return 1;
 }
 
 /*
@@ -198,22 +199,23 @@ char * read_command_line(void){
         int position = 0;
         int buf_size = 1024;
         char * command = (char *)malloc(sizeof(char) * 1024);
-        char c;
+        int c;
 
         // Read the command line character by character
         c = getchar();
         while (c != EOF && c != '\n'){
-                command[position] = c;
 
-                // Reallocate buffer as and when needed
-                if (position >= buf_size){
+                // Reallocate buffer as and when needed (leave room for NUL terminator)
+                if (position >= buf_size - 1){
                         buf_size += 64;
                         command = realloc(command, buf_size);
                 }
 
+                command[position] = c;
                 position++;
                 c = getchar();
         }
+        command[position] = '\0';
         return command;
 }
 
@@ -237,8 +239,7 @@ int start_process(char ** args){
 		
 		// Find the path of the command
 		char cmd_dir[1024];
-		strcpy(cmd_dir, PATH);
-		strcat(cmd_dir, args[0]);
+		snprintf(cmd_dir, sizeof(cmd_dir), "%s%s", PATH, args[0]);
 		
 		// Execute the required process		
 		if ( execv( cmd_dir, args ) == -1){ // Error
@@ -326,10 +327,15 @@ void shell_loop(void){
                 printf("MY_SHELL> ");
                 command_line = read_command_line();
 		if ( strcmp(command_line, "") == 0 ){
+			free(command_line);
 			continue;
 		}
                 arguments = split_command_line(command_line);
                 status = shell_execute(arguments);
+
+		// Free the buffers allocated for this iteration
+		free(arguments);
+		free(command_line);
         }
 }
 
@@ -340,8 +346,7 @@ int main(int argc, char ** argv){
 
 	// Shell initialization
 	getcwd(PWD, sizeof(PWD));	// Initialize PWD Environment Variable
-	strcpy(PATH, PWD);			// Initialize the command PATH
-	strcat(PATH, "/cmds/");		// ^^
+	snprintf(PATH, sizeof(PATH), "%s/cmds/", PWD);	// Initialize the command PATH
 
 	// Main loop of the shell
 	shell_loop();
