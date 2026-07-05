@@ -16,6 +16,12 @@ process creation (`fork`), program loading (`execv`), synchronization
 tokenization — with no external libraries beyond the C standard library and the
 POSIX system-call interface.
 
+The codebase has since been **hardened for correctness and memory safety** (see
+[Robustness & Hardening](#robustness--hardening)): unbounded `strcpy`/`strcat`
+calls were replaced with bounded `snprintf`, the `ls -l` permission-bit
+rendering and EOF handling were fixed, `getpwuid`/`getgrgid` lookups are
+`NULL`-guarded, and the per-command heap allocations are freed each iteration.
+
 ## Features
 
 Backed by the source in `Mini-Shell/miniShell.c` and `Mini-Shell/cmds/`:
@@ -34,9 +40,10 @@ Backed by the source in `Mini-Shell/miniShell.c` and `Mini-Shell/cmds/`:
 - **External commands** launched as separate processes via `fork` + `execv`,
   resolved from the shell's bundled `cmds/` directory. Included programs:
   - `ls [-a] [-l] [-i] [dir ...]` — directory listing with support for the
-    combined `-a` (show hidden), `-l` (long format: type, permissions, link
-    count, owner, group, size, mtime), and `-i` (inode number) options, with
-    entries sorted case-insensitively.
+    combined `-a` (show hidden), `-l` (long format: file type, permission bits,
+    link count, owner, group, size, and last-modified time), and `-i` (inode
+    number) options, with entries sorted case-insensitively. Flags may be
+    grouped (e.g. `ls -al`), and multiple directories may be listed at once.
   - `cat <file ...>` — print the contents of one or more files.
   - `mkdir <dir ...>` — create one or more directories (`mkdir`, mode `0755`).
   - `rmdir <dir ...>` — remove one or more (empty) directories.
@@ -66,8 +73,8 @@ Backed by the source in `Mini-Shell/miniShell.c` and `Mini-Shell/cmds/`:
     `stat` (`unistd.h`, `sys/stat.h`, `dirent.h`).
   - Metadata resolution: `getpwuid`, `getgrgid`, `localtime`, `strftime`
     (`pwd.h`, `grp.h`, `time.h`).
-  - Strings & memory: `strtok`, `strcmp`, `strcpy`, `strcat`, `malloc`,
-    `realloc` (`string.h`, `stdlib.h`).
+  - Strings & memory: `strtok`, `strcmp`, `snprintf` (bounded formatting),
+    `malloc`, `realloc`, `free` (`string.h`, `stdlib.h`).
 
 ## How It Works
 
@@ -215,6 +222,28 @@ Mini-Linux-Shell-master/
         ├── rmdir.c        # Remove directories
         └── clear.c        # Clear the terminal (ANSI escape)
 ```
+
+## Robustness & Hardening
+
+The original implementation has been reworked for correctness and memory safety.
+Concretely:
+
+- **Buffer-overflow prevention:** unbounded `strcpy`/`strcat` calls (used to
+  build the command path and the `PATH` string) were replaced with bounded
+  `snprintf`, so oversized input can no longer overrun fixed-size stack buffers.
+- **Correct `ls -l` permissions:** the long-listing permission field now renders
+  each user/group/other bit (`r`/`w`/`x` vs `-`) from `st_mode` correctly,
+  matching real `ls`.
+- **EOF / `getchar` handling:** `read_command_line()` reads with an `int` and
+  stops on both `'\n'` and `EOF`, always NUL-terminating the buffer, so a
+  Ctrl-D / piped EOF no longer misbehaves.
+- **`NULL`-guarded metadata lookups:** `getpwuid`/`getgrgid` can return `NULL`
+  for orphaned UIDs/GIDs; the long listing now checks for that and falls back to
+  the numeric id instead of dereferencing a null pointer.
+- **No per-command leaks:** the argument vector and command-line buffer returned
+  by `split_command_line()` / `read_command_line()` are `free`d on every loop
+  iteration (including the empty-input fast path), so a long session no longer
+  leaks heap memory.
 
 ## Possible Improvements
 
